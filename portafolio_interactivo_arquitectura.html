@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portafolio Interactivo de Arquitectura</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Three.js para 3D -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    
+    <!-- Pannellum para 360 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js"></script>
+
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+
+    <!-- EmailJS SDK v4 -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <script type="text/javascript">
+       (function(){
+          emailjs.init({
+            publicKey: "fWsVK1r5yGCfn7kEO",
+          });
+       })();
+    </script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        arch: { dark: '#1a1a1a', light: '#f4f4f5', accent: '#8b949e' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f4f4f5; }
+        input[type="file"] { display: none; }
+        
+        #viewer-container {
+            width: 100%;
+            height: 78vh;
+            background-color: #e5e7eb;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            position: relative;
+            box-shadow: inset 0 2px 4px 0 rgb(0 0 0 / 0.05);
+        }
+        
+        #canvas-3d, #panorama-360, #gallery-view {
+            width: 100%;
+            height: 100%;
+            display: none;
+            overflow-y: auto;
+        }
+
+        #pdf-viewer, #single-image-viewer {
+            width: 100%;
+            height: 100%;
+            display: none;
+            position: relative;
+            align-items: center;
+            justify-content: center;
+            background: #374151;
+            overflow: hidden;
+        }
+
+        .active-viewer { display: block !important; }
+        #pdf-viewer.active-viewer, #single-image-viewer.active-viewer { display: flex !important; }
+
+        #pdf-canvas, #modal-img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);
+        }
+
+        #info-overlay {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.92);
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 320px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: none;
+            backdrop-filter: blur(6px);
+            border: 1px solid rgba(255,255,255,0.4);
+            z-index: 10;
+        }
+
+        .loader-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 30;
+            display: none;
+        }
+        .spinner {
+            border: 4px solid rgba(0,0,0,0.1);
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            border-left-color: #1a1a1a;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .grayscale-preview {
+            filter: grayscale(100%);
+            transition: filter 0.3s ease, transform 0.3s ease;
+        }
+        .gallery-card:hover .grayscale-preview {
+            filter: grayscale(0%);
+            transform: scale(1.03);
+        }
+    </style>
+</head>
+<body class="text-arch-dark h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm z-20 relative">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-20 items-center">
+                
+                <!-- Logo editable -->
+                <div class="flex-shrink-0 flex items-center cursor-pointer group relative" onclick="checkAdminAction(() => document.getElementById('logo-upload').click())" title="Haz clic para cambiar el logo (Solo Admin)">
+                    <img id="main-logo" class="h-10 w-auto transition-transform group-hover:scale-105" src="https://placehold.co/200x80/1a1a1a/ffffff?text=Tu+Estudio" alt="Logo">
+                    <input type="file" id="logo-upload" accept="image/png, image/jpeg" onchange="changeLogo(event)">
+                    <span class="hidden group-hover:inline-block absolute -bottom-6 left-0 text-[10px] bg-gray-800 text-white px-2 py-0.5 rounded shadow">Cambiar logo</span>
+                </div>
+
+                <!-- Menú Principal -->
+                <nav class="hidden md:flex space-x-6">
+                    <!-- Modelos 3D -->
+                    <div class="relative group">
+                        <button class="text-gray-600 hover:text-arch-dark px-3 py-2 rounded-md text-sm font-medium flex items-center transition-colors">
+                            <i class="fa-solid fa-cube mr-2"></i> Modelos 3D
+                            <i class="fa-solid fa-chevron-down ml-1.5 text-xs"></i>
+                        </button>
+                        <div class="absolute z-10 left-0 mt-2 w-52 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+                            <div class="py-1">
+                                <label class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer admin-only">
+                                    Subir modelo (.glb/.gltf)
+                                    <input type="file" id="upload-3d" accept=".glb,.gltf" onchange="load3DModel(event)">
+                                </label>
+                                <div id="admin-model-replace" class="hidden border-t">
+                                    <label class="block px-4 py-2 text-sm text-blue-600 hover:bg-gray-100 cursor-pointer font-medium">
+                                        Reemplazar modelo 3D
+                                        <input type="file" accept=".glb,.gltf" onchange="load3DModel(event)">
+                                    </label>
+                                    <button onclick="delete3DModel()" class="w-full text-left block px-4 py-2 text-sm text-red-600 hover:bg-gray-100 font-medium">Eliminar modelo 3D</button>
+                                </div>
+                                <a href="#" onclick="loadDemo3D()" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 border-t">Cargar modelo Demo</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Planos -->
+                    <div class="relative group">
+                        <button class="text-gray-600 hover:text-arch-dark px-3 py-2 rounded-md text-sm font-medium flex items-center transition-colors">
+                            <i class="fa-regular fa-map mr-2"></i> Planos
+                            <i class="fa-solid fa-chevron-down ml-1.5 text-xs"></i>
+                        </button>
+                        <div class="absolute z-10 left-0 mt-2 w-52 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+                            <div class="py-1">
+                                <label class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer border-b admin-only">
+                                    Subir Planos (.pdf)
+                                    <input type="file" id="upload-pdf" accept=".pdf" multiple onchange="loadPDFs(event)">
+                                </label>
+                                <a href="#" onclick="showPlansGallery()" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 font-medium">Ver galería de planos</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Imágenes / 360 -->
+                    <div class="relative group">
+                        <button class="text-gray-600 hover:text-arch-dark px-3 py-2 rounded-md text-sm font-medium flex items-center transition-colors">
+                            <i class="fa-regular fa-image mr-2"></i> Imágenes / 360
+                            <i class="fa-solid fa-chevron-down ml-1.5 text-xs"></i>
+                        </button>
+                        <div class="absolute z-10 left-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+                            <div class="py-1">
+                                <label class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer border-b admin-only">
+                                    Subir Imagen / 360 (.jpg, .png)
+                                    <input type="file" id="upload-image" accept="image/png, image/jpeg" multiple onchange="loadImagesAnd360(event)">
+                                </label>
+                                <a href="#" onclick="showImagesGallery()" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 font-medium">Ver galería de imágenes</a>
+                            </div>
+                        </div>
+                    </div>
+                </nav>
+                
+                <!-- Acceso / Estado -->
+                <div class="flex items-center space-x-3">
+                    <div id="status-badge" class="hidden md:flex items-center text-xs font-semibold px-3 py-1 rounded-full bg-red-100 text-red-800">
+                        Acceso Restringido
+                    </div>
+                    <button onclick="toggleAdminModal()" class="bg-arch-dark text-white text-xs px-3 py-2 rounded-md hover:bg-gray-800 transition-colors flex items-center shadow-sm">
+                        <i class="fa-solid fa-key mr-1.5"></i> Portal de Acceso
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Modal de Gestión de Accesos y Notificaciones -->
+    <div id="admin-modal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-lg p-6 w-full max-w-lg shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button onclick="toggleAdminModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark text-lg"></i></button>
+            <h3 class="text-lg font-bold text-arch-dark mb-1">Portal de Validación y Accesos</h3>
+            <p class="text-xs text-gray-500 mb-4">Propietario y Administrador: <strong class="text-arch-dark">proyectosjhs.2026@gmail.com</strong></p>
+            
+            <!-- Login Box -->
+            <div id="auth-login-box" class="space-y-3 mb-4">
+                <label class="block text-xs font-semibold text-gray-700">Ingrese su Correo Electrónico:</label>
+                <div class="flex gap-2">
+                    <input type="email" id="auth-email-input" placeholder="correo@dominio.com" class="flex-grow text-sm border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-arch-dark">
+                    <button onclick="verifyUserAccess()" class="bg-arch-dark text-white text-xs px-4 py-2 rounded font-medium hover:bg-gray-800">Acceder</button>
+                </div>
+            </div>
+
+            <!-- Panel exclusivo del Administrador (proyectosjhs.2026@gmail.com) -->
+            <div id="admin-panel-section" class="hidden space-y-4 border-t pt-4">
+                <div class="bg-indigo-50 p-3 rounded text-xs text-indigo-900 flex items-center justify-between">
+                    <span><i class="fa-solid fa-user-shield mr-1"></i> Sesión Administrador (proyectosjhs.2026@gmail.com)</span>
+                    <button onclick="logoutSession()" class="text-red-600 underline font-semibold">Cerrar Sesión</button>
+                </div>
+                
+                <div class="bg-gray-50 p-3 rounded border">
+                    <label class="block text-xs font-bold text-gray-700 mb-1">Otorgar Acceso a Nuevo Participante:</label>
+                    <p class="text-[11px] text-gray-500 mb-2">Se enviará un correo electrónico oficial desde <strong>proyectosjhs.2026@gmail.com</strong> con el mensaje de bienvenida al portal.</p>
+                    <div class="flex gap-2">
+                        <input type="email" id="new-participant-email" placeholder="participante@correo.com" class="flex-grow text-xs border border-gray-300 rounded px-2.5 py-1.5">
+                        <button onclick="addParticipantAndNotify()" class="bg-blue-600 text-white text-xs px-3 py-1.5 rounded font-medium hover:bg-blue-700 whitespace-nowrap">
+                            <i class="fa-solid fa-paper-plane mr-1"></i> Añadir y Enviar Correo
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Participantes con Acceso Autorizado:</label>
+                    <ul id="authorized-participants-list" class="bg-gray-50 border rounded p-2 max-h-36 overflow-y-auto text-xs space-y-1 text-gray-600">
+                        <!-- Dinámico -->
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Panel de Invitado -->
+            <div id="guest-panel-section" class="hidden space-y-3 border-t pt-4">
+                <div class="bg-green-50 p-3 rounded text-xs text-green-800 flex items-center justify-between">
+                    <span><i class="fa-solid fa-circle-check mr-1"></i> Acceso Autorizado (Visualización y Descarga)</span>
+                    <button onclick="logoutSession()" class="text-red-600 underline font-semibold">Cerrar Sesión</button>
+                </div>
+                <p class="text-xs text-gray-600">Tiene acceso para navegar por el modelo 3D, visualizar planos y renders 360, y descargar documentos.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contenido Principal -->
+    <main class="flex-grow flex flex-col md:flex-row overflow-hidden max-w-7xl mx-auto w-full p-4 gap-6">
+        
+        <!-- Panel Lateral -->
+        <aside class="w-full md:w-80 bg-white p-5 rounded-lg shadow-sm flex flex-col h-full overflow-y-auto">
+            
+            <!-- Nombre del Proyecto -->
+            <div class="mb-4 pb-3 border-b border-gray-200">
+                <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Proyecto Activo</label>
+                <div class="relative group flex items-center">
+                    <input type="text" id="project-name-input" oninput="checkAdminAction()" class="w-full text-lg font-bold text-arch-dark bg-gray-50 border border-gray-200 focus:border-arch-dark focus:bg-white focus:outline-none transition-all px-2.5 py-1 rounded-md" value="Residencia Valle Alto">
+                    <i class="fa-solid fa-pen text-xs text-gray-400 ml-2"></i>
+                </div>
+            </div>
+
+            <!-- Botón Guardar Cambios (Solo Administrador) -->
+            <div id="save-changes-container" class="mb-4 hidden admin-only">
+                <button onclick="saveAllChanges()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 px-3 rounded-md shadow transition-colors flex items-center justify-center">
+                    <i class="fa-solid fa-floppy-disk mr-2"></i> Guardar Cambios
+                </button>
+            </div>
+
+            <!-- Bienvenida -->
+            <div id="welcome-message" class="text-sm text-gray-600 mb-6 space-y-2">
+                <p>Portafolio arquitectónico protegido. Ingrese su correo autorizado en el "Portal de Acceso" para visualizar el contenido.</p>
+                <ul class="list-disc pl-5 text-xs text-gray-500 space-y-1">
+                    <li>Administrador principal: <strong>proyectosjhs.2026@gmail.com</strong></li>
+                    <li>Visualización 3D interactiva y galerías.</li>
+                    <li>Opción de descarga directa en cada archivo.</li>
+                </ul>
+            </div>
+
+            <!-- Controles 3D -->
+            <div id="3d-controls" class="hidden flex-col gap-4">
+                <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Detalles del Modelo 3D</h3>
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Seleccionar Sección:</label>
+                    <select id="info-selector" class="block w-full pl-3 pr-8 py-2 text-sm border-gray-300 rounded-md border bg-gray-50" onchange="updateInfoPanel()">
+                        <option value="general">Información General</option>
+                        <option value="materiales">Materiales y Acabados</option>
+                        <option value="iluminacion">Iluminación</option>
+                    </select>
+                </div>
+                <div class="bg-gray-50 p-4 rounded-md border border-gray-200 space-y-3">
+                    <div>
+                        <label class="block text-[10px] font-semibold text-gray-400 uppercase mb-1">Título</label>
+                        <input type="text" id="info-title-input" oninput="saveCurrentSectionData()" class="w-full text-sm font-semibold border border-gray-300 rounded px-2 py-1 bg-white admin-editable">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-semibold text-gray-400 uppercase mb-1">Descripción</label>
+                        <textarea id="info-content-input" rows="3" oninput="saveCurrentSectionData()" class="w-full text-xs border border-gray-300 rounded p-2 bg-white resize-none admin-editable"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Controles Planos e Imágenes -->
+            <div id="gallery-controls" class="hidden flex-col gap-4">
+                <h3 id="gallery-controls-title" class="text-xs font-bold text-gray-400 uppercase tracking-wider">Gestión de Archivos</h3>
+                <p class="text-xs text-gray-500">Selecciona cualquier elemento de la galería para abrirlo en tamaño completo con opciones de navegación y descarga.</p>
+                <button onclick="switchViewToGallery()" class="w-full bg-gray-100 hover:bg-gray-200 border border-gray-300 text-xs font-medium py-2 rounded transition-colors">
+                    <i class="fa-solid fa-grid-2 mr-1"></i> Ver Cuadrícula Completa
+                </button>
+            </div>
+            
+            <div id="file-name-display" class="mt-auto pt-4 border-t text-[11px] text-gray-400 break-all">
+                Ningún archivo seleccionado.
+            </div>
+        </aside>
+
+        <!-- Área Central -->
+        <section class="flex-grow flex flex-col">
+            <div id="viewer-container" class="flex-grow relative bg-white shadow-sm border border-gray-200">
+                
+                <div id="main-loader" class="loader-overlay">
+                    <div class="spinner"></div>
+                </div>
+
+                <!-- Estado Vacío -->
+                <div id="empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
+                    <i class="fa-regular fa-folder-open text-6xl mb-4 text-gray-300"></i>
+                    <p class="text-lg font-medium text-gray-500">Portafolio Restringido</p>
+                    <p class="text-sm">Por favor, valide su acceso en el "Portal de Acceso" superior</p>
+                </div>
+
+                <!-- Visor 3D -->
+                <div id="canvas-3d"></div>
+                <!-- Visor 360 -->
+                <div id="panorama-360"></div>
+                
+                <!-- Visor Individual de Plano (PDF) -->
+                <div id="pdf-viewer">
+                    <button onclick="navigateSingle(-1)" class="absolute left-4 z-20 bg-white/80 hover:bg-white text-arch-dark p-3 rounded-full shadow-lg transition-transform hover:scale-110">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </button>
+                    <canvas id="pdf-canvas"></canvas>
+                    <button onclick="navigateSingle(1)" class="absolute right-4 z-20 bg-white/80 hover:bg-white text-arch-dark p-3 rounded-full shadow-lg transition-transform hover:scale-110">
+                        <i class="fa-solid fa-chevron-right"></i>
+                    </button>
+                    <button onclick="switchViewToGallery()" class="absolute top-4 right-4 z-20 bg-white/90 hover:bg-white text-arch-dark px-3 py-1.5 rounded text-xs font-semibold shadow">
+                        <i class="fa-solid fa-xmark mr-1"></i> Cerrar / Volver a Galería
+                    </button>
+                </div>
+
+                <!-- Visor Individual de Imagen -->
+                <div id="single-image-viewer">
+                    <button onclick="navigateSingle(-1)" class="absolute left-4 z-20 bg-white/80 hover:bg-white text-arch-dark p-3 rounded-full shadow-lg transition-transform hover:scale-110">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </button>
+                    <img id="modal-img" src="" alt="Vista previa ampliada">
+                    <button onclick="navigateSingle(1)" class="absolute right-4 z-20 bg-white/80 hover:bg-white text-arch-dark p-3 rounded-full shadow-lg transition-transform hover:scale-110">
+                        <i class="fa-solid fa-chevron-right"></i>
+                    </button>
+                    <button onclick="switchViewToGallery()" class="absolute top-4 right-4 z-20 bg-white/90 hover:bg-white text-arch-dark px-3 py-1.5 rounded text-xs font-semibold shadow">
+                        <i class="fa-solid fa-xmark mr-1"></i> Cerrar / Volver a Galería
+                    </button>
+                </div>
+
+                <!-- Vista de Galería Principal -->
+                <div id="gallery-view" class="p-6 bg-gray-50">
+                    <h2 id="gallery-title" class="text-lg font-bold text-arch-dark mb-4">Galería de Elementos</h2>
+                    <div id="gallery-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                        <!-- Generado dinámicamente -->
+                    </div>
+                </div>
+
+                <!-- Overlay 3D -->
+                <div id="info-overlay">
+                    <h4 id="overlay-title" class="font-bold text-sm text-arch-dark mb-1">Información</h4>
+                    <p id="overlay-desc" class="text-xs text-gray-600 leading-relaxed"></p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // --- ESTADO GLOBAL Y ACCESO ---
+        const ADMIN_EMAIL = "proyectosjhs.2026@gmail.com";
+        let currentUserEmail = null;
+        let isAdminActive = false;
+        let isGuestActive = false;
+        
+        let authorizedParticipants = ["mtll.fh@gmail.com", "arquitecto.socio@gmail.com"];
+        
+        let currentMode = 'empty'; 
+        let plansList = []; 
+        let imagesList = []; 
+        let currentIndex = 0;
+        let hasActive3D = false;
+
+        // Three.js
+        let scene, camera, renderer, controls, currentModel, animationId;
+
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
+
+        const projectData = {
+            general: { title: "Información General", desc: "Vista general del diseño arquitectónico." },
+            materiales: { title: "Materiales y Acabados", desc: "Acabados en piedra natural, madera y vidrio templado." },
+            iluminacion: { title: "Iluminación", desc: "Diseño de iluminación natural y artificial integrada." }
+        };
+
+        function updateStatus(message, type = 'success') {
+            const badge = document.getElementById('status-badge');
+            badge.textContent = message;
+            badge.className = `hidden md:flex items-center text-xs font-semibold px-3 py-1 rounded-full ${type === 'success' ? 'bg-indigo-100 text-indigo-800' : type === 'warning' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`;
+        }
+
+        function showLoader(show) {
+            document.getElementById('main-loader').style.display = show ? 'flex' : 'none';
+        }
+
+        function toggleAdminModal() {
+            const modal = document.getElementById('admin-modal');
+            modal.classList.toggle('hidden');
+            renderParticipantsList();
+        }
+
+        function verifyUserAccess() {
+            const email = document.getElementById('auth-email-input').value.trim().toLowerCase();
+            if (!email) {
+                alert("Por favor ingrese un correo electrónico válido.");
+                return;
+            }
+
+            if (email === ADMIN_EMAIL) {
+                isAdminActive = true;
+                isGuestActive = false;
+                currentUserEmail = email;
+                document.getElementById('auth-login-box').classList.add('hidden');
+                document.getElementById('admin-panel-section').classList.remove('hidden');
+                document.getElementById('guest-panel-section').classList.add('hidden');
+                updateStatus('Administrador (proyectosjhs.2026@gmail.com)', 'success');
+                applyPermissions();
+                alert("¡Bienvenido Administrador! Sesión iniciada con éxito.");
+            } else if (authorizedParticipants.includes(email)) {
+                isAdminActive = false;
+                isGuestActive = true;
+                currentUserEmail = email;
+                document.getElementById('auth-login-box').classList.add('hidden');
+                document.getElementById('admin-panel-section').classList.add('hidden');
+                document.getElementById('guest-panel-section').classList.remove('hidden');
+                updateStatus('Acceso Autorizado (Visualización)', 'info');
+                applyPermissions();
+                alert("¡Bienvenido al portal! Acceso concedido para visualización, interacción y descarga.");
+            } else {
+                alert("Acceso denegado. Este correo no cuenta con autorización del administrador.");
+            }
+        }
+
+        function logoutSession() {
+            isAdminActive = false;
+            isGuestActive = false;
+            currentUserEmail = null;
+            document.getElementById('auth-login-box').classList.remove('hidden');
+            document.getElementById('admin-panel-section').classList.add('hidden');
+            document.getElementById('guest-panel-section').classList.add('hidden');
+            document.getElementById('auth-email-input').value = '';
+            updateStatus('Acceso Restringido', 'warning');
+            applyPermissions();
+        }
+
+        function addParticipantAndNotify() {
+            if (!isAdminActive) return;
+            const input = document.getElementById('new-participant-email');
+            const email = input.value.trim().toLowerCase();
+            
+            if (!email || !email.includes('@')) {
+                alert("Ingrese una dirección de correo electrónico válida.");
+                return;
+            }
+
+            if (authorizedParticipants.includes(email) || email === ADMIN_EMAIL) {
+                alert("Este correo ya se encuentra registrado.");
+                return;
+            }
+
+            authorizedParticipants.push(email);
+            input.value = '';
+            renderParticipantsList();
+
+            enviarCorreoReal(email);
+        }
+
+        function enviarCorreoReal(emailDestino) {
+            const parametrosVariables = {
+                to_email: emailDestino,
+                admin_email: "proyectosjhs.2026@gmail.com",
+                mensaje: "¡Acceso concedido al Portafolio Interactivo de Arquitectura! Ya puedes visualizar planos, modelos 3D y descargar documentos."
+            };
+
+            emailjs.send('001', 'template_ctxwcmc', parametrosVariables)
+                .then(function(response) {
+                   console.log('¡Correo enviado con éxito!', response.status, response.text);
+                   alert("¡Correo de Bienvenida enviado exitosamente a " + emailDestino + " desde proyectosjhs.2026@gmail.com!");
+                }, function(error) {
+                   console.log('Fallo en el envío por API de EmailJS:', error);
+                   const subject = encodeURIComponent("¡Bienvenido al Portafolio Interactivo de Arquitectura!");
+                   const body = encodeURIComponent(`Hola,\n\nSe le ha otorgado acceso autorizado al portafolio de proyectosjhs.2026@gmail.com.\nYa puedes visualizar planos, modelos 3D y descargar documentos.\n\nAtentamente,\nproyectosjhs.2026@gmail.com`);
+                   window.location.href = `mailto:${emailDestino}?subject=${subject}&body=${body}`;
+                   alert("Participante añadido. Se abrió su cliente de correo para completar el envío desde proyectosjhs.2026@gmail.com.");
+                });
+        }
+
+        function removeParticipant(email) {
+            if (!isAdminActive) return;
+            authorizedParticipants = authorizedParticipants.filter(e => e !== email);
+            renderParticipantsList();
+        }
+
+        function renderParticipantsList() {
+            const list = document.getElementById('authorized-participants-list');
+            list.innerHTML = '';
+            authorizedParticipants.forEach(email => {
+                const li = document.createElement('li');
+                li.className = 'flex justify-between items-center bg-white px-2 py-1 rounded border';
+                li.innerHTML = `<span>${email}</span> ${isAdminActive ? `<button onclick="removeParticipant('${email}')" class="text-red-500 hover:text-red-700 font-bold"><i class="fa-solid fa-trash"></i></button>` : ''}`;
+                list.appendChild(li);
+            });
+        }
+
+        function checkAdminAction(callback) {
+            if (!isAdminActive) {
+                alert("Acción restringida. Únicamente el administrador principal (proyectosjhs.2026@gmail.com) puede modificar contenido, textos o archivos.");
+                toggleAdminModal();
+                return false;
+            }
+            if (callback) callback();
+            return true;
+        }
+
+        function applyPermissions() {
+            const adminOnlyElements = document.querySelectorAll('.admin-only');
+            adminOnlyElements.forEach(el => {
+                el.style.display = isAdminActive ? 'block' : 'none';
+            });
+
+            const editableInputs = document.querySelectorAll('.admin-editable, #project-name-input, #info-title-input, #info-content-input');
+            editableInputs.forEach(input => {
+                if (!isAdminActive) {
+                    input.setAttribute('readonly', true);
+                    input.classList.add('bg-gray-100', 'cursor-not-allowed');
+                } else {
+                    input.removeAttribute('readonly');
+                    input.classList.remove('bg-gray-100', 'cursor-not-allowed');
+                }
+            });
+
+            if (currentMode === 'pdf-gallery') showPlansGallery();
+            if (currentMode === 'image-gallery') showImagesGallery();
+            if (hasActive3D) {
+                document.getElementById('admin-model-replace').style.display = isAdminActive ? 'block' : 'none';
+            }
+        }
+
+        function saveAllChanges() {
+            if (!checkAdminAction()) return;
+            const projName = document.getElementById('project-name-input').value;
+            updateStatus('Cambios guardados con éxito');
+            alert(`¡Los cambios del proyecto "${projName}" han sido guardados y aplicados correctamente!`);
+        }
+
+        function hideAllViewers() {
+            document.getElementById('empty-state').style.display = 'none';
+            document.getElementById('canvas-3d').classList.remove('active-viewer');
+            document.getElementById('panorama-360').classList.remove('active-viewer');
+            document.getElementById('pdf-viewer').classList.remove('active-viewer');
+            document.getElementById('single-image-viewer').classList.remove('active-viewer');
+            document.getElementById('gallery-view').classList.remove('active-viewer');
+            
+            document.getElementById('3d-controls').classList.add('hidden');
+            document.getElementById('gallery-controls').classList.add('hidden');
+            document.getElementById('welcome-message').classList.add('hidden');
+            document.getElementById('info-overlay').style.display = 'none';
+
+            if (animationId) cancelAnimationFrame(animationId);
+            if (window.viewer360) {
+                window.viewer360.destroy();
+                window.viewer360 = null;
+            }
+        }
+
+        function changeLogo(event) {
+            if (!checkAdminAction()) return;
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = e => { document.getElementById('main-logo').src = e.target.result; updateStatus('Logo actualizado'); };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // --- MODELO 3D ---
+        function init3D() {
+            const container = document.getElementById('canvas-3d');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xe5e7eb);
+            camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            container.innerHTML = '';
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(10, 20, 10);
+            scene.add(dirLight);
+        }
+
+        function animate3D() {
+            animationId = requestAnimationFrame(animate3D);
+            if(controls) controls.update();
+            if(renderer && scene && camera) renderer.render(scene, camera);
+        }
+
+        function load3DModel(event) {
+            if (!checkAdminAction()) return;
+            const file = event.target.files[0];
+            if (!file) return;
+            showLoader(true);
+            updateStatus('Cargando 3D...', 'loading');
+            hideAllViewers();
+            document.getElementById('canvas-3d').classList.add('active-viewer');
+            document.getElementById('3d-controls').classList.remove('hidden');
+            document.getElementById('info-overlay').style.display = 'block';
+            hasActive3D = true;
+            document.getElementById('admin-model-replace').style.display = isAdminActive ? 'block' : 'none';
+
+            if(!scene) init3D();
+            if(currentModel) scene.remove(currentModel);
+
+            const reader = new FileReader();
+            reader.onload = e => {
+                new THREE.GLTFLoader().parse(e.target.result, '', gltf => {
+                    currentModel = gltf.scene;
+                    scene.add(currentModel);
+                    camera.position.set(5, 5, 5);
+                    showLoader(false);
+                    updateStatus('Modelo 3D cargado');
+                    animate3D();
+                    updateInfoPanel();
+                });
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function loadDemo3D() {
+            showLoader(true);
+            hideAllViewers();
+            document.getElementById('canvas-3d').classList.add('active-viewer');
+            document.getElementById('3d-controls').classList.remove('hidden');
+            document.getElementById('info-overlay').style.display = 'block';
+            hasActive3D = true;
+            document.getElementById('admin-model-replace').style.display = isAdminActive ? 'block' : 'none';
+
+            if(!scene) init3D();
+            if(currentModel) scene.remove(currentModel);
+
+            currentModel = new THREE.Group();
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(8,8), new THREE.MeshStandardMaterial({color: 0xd1d5db}));
+            floor.rotation.x = -Math.PI/2;
+            currentModel.add(floor);
+            scene.add(currentModel);
+            camera.position.set(5, 4, 5);
+            showLoader(false);
+            updateStatus('Demo 3D activo');
+            animate3D();
+            updateInfoPanel();
+        }
+
+        function delete3DModel() {
+            if (!checkAdminAction()) return;
+            if (confirm("¿Estás seguro de eliminar el modelo 3D actual?")) {
+                if(currentModel) scene.remove(currentModel);
+                currentModel = null;
+                hasActive3D = false;
+                document.getElementById('admin-model-replace').style.display = 'none';
+                hideAllViewers();
+                document.getElementById('empty-state').style.display = 'flex';
+                updateStatus('Modelo 3D eliminado');
+            }
+        }
+
+        function updateInfoPanel() {
+            const sel = document.getElementById('info-selector').value;
+            const data = projectData[sel];
+            document.getElementById('info-title-input').value = data.title;
+            document.getElementById('info-content-input').value = data.desc;
+            document.getElementById('overlay-title').textContent = data.title;
+            document.getElementById('overlay-desc').textContent = data.desc;
+        }
+
+        function saveCurrentSectionData() {
+            if (!isAdminActive) return;
+            const sel = document.getElementById('info-selector').value;
+            projectData[sel].title = document.getElementById('info-title-input').value;
+            projectData[sel].desc = document.getElementById('info-content-input').value;
+            document.getElementById('overlay-title').textContent = projectData[sel].title;
+            document.getElementById('overlay-desc').textContent = projectData[sel].desc;
+        }
+
+        // --- PLANOS (PDFS) ---
+        function loadPDFs(event) {
+            if (!checkAdminAction()) return;
+            const files = Array.from(event.target.files);
+            if (!files.length) return;
+            showLoader(true);
+            updateStatus('Cargando planos...', 'loading');
+
+            let processed = 0;
+            files.forEach(file => {
+                const reader = new FileReader();
+                reader.onload = function() {
+                    pdfjsLib.getDocument(new Uint8Array(this.result)).promise.then(pdf => {
+                        pdf.getPage(1).then(page => {
+                            const viewport = page.getViewport({ scale: 0.5 });
+                            const canvas = document.createElement('canvas');
+                            canvas.width = viewport.width;
+                            canvas.height = viewport.height;
+                            const ctx = canvas.getContext('2d');
+                            page.render({ canvasContext: ctx, viewport: viewport }).promise.then(() => {
+                                plansList.push({
+                                    name: file.name.replace(/\.[^/.]+$/, ""),
+                                    fileObj: file,
+                                    pdfDoc: pdf,
+                                    thumbnail: canvas.toDataURL()
+                                });
+                                processed++;
+                                if (processed === files.length) {
+                                    showLoader(false);
+                                    showPlansGallery();
+                                    updateStatus('Planos cargados con éxito');
+                                }
+                            });
+                        });
+                    });
+                };
+                reader.readAsArrayBuffer(file);
+            });
+            event.target.value = '';
+        }
+
+        function showPlansGallery() {
+            if (plansList.length === 0) {
+                alert("No hay planos cargados actualmente.");
+                return;
+            }
+            currentMode = 'pdf-gallery';
+            hideAllViewers();
+            document.getElementById('gallery-view').classList.add('active-viewer');
+            document.getElementById('gallery-controls').classList.remove('hidden');
+            document.getElementById('gallery-controls-title').textContent = 'Planos del Proyecto';
+            document.getElementById('gallery-title').textContent = 'Galería de Planos Arquitectónicos';
+
+            const grid = document.getElementById('gallery-grid');
+            grid.innerHTML = '';
+
+            plansList.forEach((plan, idx) => {
+                const card = document.createElement('div');
+                card.className = 'gallery-card bg-white p-3 rounded-lg shadow-sm border border-gray-200 flex flex-col items-center cursor-pointer transition-transform hover:shadow-md relative';
+                card.innerHTML = `
+                    <a href="${URL.createObjectURL(plan.fileObj)}" download="${plan.name}.pdf" onclick="event.stopPropagation()" class="absolute top-4 right-4 z-10 bg-black/30 hover:bg-black text-white p-2 rounded-full transition-colors" title="Descargar plano">
+                        <i class="fa-solid fa-download text-xs"></i>
+                    </a>
+                    
+                    <div class="w-full h-40 bg-gray-100 rounded mb-2 overflow-hidden flex items-center justify-center relative">
+                        <img src="${plan.thumbnail}" class="w-full h-full object-contain transition-transform duration-300 hover:scale-105" alt="Plano">
+                    </div>
+                    
+                    <input type="text" value="${plan.name}" ${!isAdminActive ? 'readonly' : ''} onclick="event.stopPropagation()" onchange="if(isAdminActive) plansList[${idx}].name = this.value" class="w-full text-center text-xs font-semibold text-gray-700 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:bg-white focus:outline-none py-1">
+                    
+                    ${isAdminActive ? `
+                    <div class="flex gap-2 mt-2 w-full pt-2 border-t text-[11px]">
+                        <label class="flex-grow text-center bg-blue-50 hover:bg-blue-100 text-blue-700 py-1 rounded cursor-pointer font-medium" onclick="event.stopPropagation()">
+                            Reemplazar
+                            <input type="file" accept=".pdf" onchange="replacePlan(event, ${idx})">
+                        </label>
+                        <button onclick="event.stopPropagation(); deletePlan(${idx})" class="flex-grow bg-red-50 hover:bg-red-100 text-red-700 py-1 rounded font-medium">Eliminar</button>
+                    </div>` : ''}
+                `;
+                card.onclick = () => openPlanViewer(idx);
+                grid.appendChild(card);
+            });
+            document.getElementById('file-name-display').textContent = `${plansList.length} planos cargados`;
+        }
+
+        function replacePlan(event, idx) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function() {
+                pdfjsLib.getDocument(new Uint8Array(this.result)).promise.then(pdf => {
+                    pdf.getPage(1).then(page => {
+                        const viewport = page.getViewport({ scale: 0.5 });
+                        const canvas = document.createElement('canvas');
+                        canvas.width = viewport.width;
+                        canvas.height = viewport.height;
+                        const ctx = canvas.getContext('2d');
+                        page.render({ canvasContext: ctx, viewport: viewport }).promise.then(() => {
+                            plansList[idx] = {
+                                name: file.name.replace(/\.[^/.]+$/, ""),
+                                fileObj: file,
+                                pdfDoc: pdf,
+                                thumbnail: canvas.toDataURL()
+                            };
+                            showPlansGallery();
+                            updateStatus('Plano reemplazado');
+                        });
+                    });
+                });
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function deletePlan(idx) {
+            if (confirm("¿Estás seguro de eliminar este plano?")) {
+                plansList.splice(idx, 1);
+                if (plansList.length === 0) {
+                    hideAllViewers();
+                    document.getElementById('empty-state').style.display = 'flex';
+                } else {
+                    showPlansGallery();
+                }
+                updateStatus('Plano eliminado');
+            }
+        }
+
+        function openPlanViewer(idx) {
+            currentIndex = idx;
+            currentMode = 'pdf-single';
+            hideAllViewers();
+            document.getElementById('pdf-viewer').classList.add('active-viewer');
+            document.getElementById('gallery-controls').classList.remove('hidden');
+            renderSinglePDF(currentIndex);
+        }
+
+        function renderSinglePDF(idx) {
+            const plan = plansList[idx];
+            document.getElementById('file-name-display').textContent = `Viendo Plano: ${plan.name} (${idx + 1}/${plansList.length})`;
+            plan.pdfDoc.getPage(1).then(page => {
+                const canvas = document.getElementById('pdf-canvas');
+                const ctx = canvas.getContext('2d');
+                const container = document.getElementById('viewer-container');
+                const viewport = page.getViewport({ scale: 1.0 });
+                
+                const scaleX = (container.clientWidth - 40) / viewport.width;
+                const scaleY = (container.clientHeight - 40) / viewport.height;
+                const scale = Math.min(scaleX, scaleY);
+
+                const scaledViewport = page.getViewport({ scale: scale });
+                canvas.height = scaledViewport.height;
+                canvas.width = scaledViewport.width;
+
+                page.render({ canvasContext: ctx, viewport: scaledViewport });
+            });
+        }
+
+        // --- IMÁGENES Y 360 ---
+        function loadImagesAnd360(event) {
+            if (!checkAdminAction()) return;
+            const files = Array.from(event.target.files);
+            if (!files.length) return;
+            showLoader(true);
+            updateStatus('Cargando imágenes...', 'loading');
+
+            let processed = 0;
+            files.forEach(file => {
+                const reader = new FileReader();
+                reader.onload = e => {
+                    const is360 = confirm(`¿Deseas que la imagen "${file.name}" sea un Render 360 Interactivo?\n(Haz clic en Cancelar para imagen normal)`);
+                    imagesList.push({
+                        name: file.name.replace(/\.[^/.]+$/, ""),
+                        fileObj: file,
+                        src: e.target.result,
+                        is360: is360
+                    });
+                    processed++;
+                    if (processed === files.length) {
+                        showLoader(false);
+                        showImagesGallery();
+                        updateStatus('Imágenes cargadas');
+                    }
+                };
+                reader.readAsDataURL(file);
+            });
+            event.target.value = '';
+        }
+
+        function showImagesGallery() {
+            if (imagesList.length === 0) {
+                alert("No hay imágenes o renders cargados.");
+                return;
+            }
+            currentMode = 'image-gallery';
+            hideAllViewers();
+            document.getElementById('gallery-view').classList.add('active-viewer');
+            document.getElementById('gallery-controls').classList.remove('hidden');
+            document.getElementById('gallery-controls-title').textContent = 'Imágenes / Renders 360';
+            document.getElementById('gallery-title').textContent = 'Galería de Visualizaciones';
+
+            const grid = document.getElementById('gallery-grid');
+            grid.innerHTML = '';
+
+            imagesList.forEach((img, idx) => {
+                const card = document.createElement('div');
+                card.className = 'gallery-card bg-white p-3 rounded-lg shadow-sm border border-gray-200 flex flex-col items-center cursor-pointer transition-transform hover:shadow-md relative';
+                card.innerHTML = `
+                    <a href="${img.src}" download="${img.name}.jpg" onclick="event.stopPropagation()" class="absolute top-4 right-4 z-10 bg-black/30 hover:bg-black text-white p-2 rounded-full transition-colors" title="Descargar imagen">
+                        <i class="fa-solid fa-download text-xs"></i>
+                    </a>
+
+                    <div class="w-full h-40 bg-gray-100 rounded mb-2 overflow-hidden relative flex items-center justify-center">
+                        <img src="${img.src}" class="w-full h-full object-cover grayscale-preview" alt="Imagen">
+                        ${img.is360 ? '<span class="absolute top-2 left-2 bg-black/60 text-white text-[10px] px-2 py-0.5 rounded-full"><i class="fa-solid fa-vr-cardboard mr-1"></i>360</span>' : ''}
+                    </div>
+                    
+                    <input type="text" value="${img.name}" ${!isAdminActive ? 'readonly' : ''} onclick="event.stopPropagation()" onchange="if(isAdminActive) imagesList[${idx}].name = this.value" class="w-full text-center text-xs font-semibold text-gray-700 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:bg-white focus:outline-none py-1">
+                    
+                    ${isAdminActive ? `
+                    <div class="flex gap-2 mt-2 w-full pt-2 border-t text-[11px]">
+                        <label class="flex-grow text-center bg-blue-50 hover:bg-blue-100 text-blue-700 py-1 rounded cursor-pointer font-medium" onclick="event.stopPropagation()">
+                            Reemplazar
+                            <input type="file" accept="image/png, image/jpeg" onchange="replaceImage(event, ${idx})">
+                        </label>
+                        <button onclick="event.stopPropagation(); deleteImage(${idx})" class="flex-grow bg-red-50 hover:bg-red-100 text-red-700 py-1 rounded font-medium">Eliminar</button>
+                    </div>` : ''}
+                `;
+                card.onclick = () => openImageViewer(idx);
+                grid.appendChild(card);
+            });
+            document.getElementById('file-name-display').textContent = `${imagesList.length} imágenes cargadas`;
+        }
+
+        function replaceImage(event, idx) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                const is360 = confirm(`¿Deseas que la nueva imagen sea un Render 360 Interactivo?`);
+                imagesList[idx] = {
+                    name: file.name.replace(/\.[^/.]+$/, ""),
+                    fileObj: file,
+                    src: e.target.result,
+                    is360: is360
+                };
+                showImagesGallery();
+                updateStatus('Imagen reemplazada');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function deleteImage(idx) {
+            if (confirm("¿Estás seguro de eliminar esta imagen?")) {
+                imagesList.splice(idx, 1);
+                if (imagesList.length === 0) {
+                    hideAllViewers();
+                    document.getElementById('empty-state').style.display = 'flex';
+                } else {
+                    showImagesGallery();
+                }
+                updateStatus('Imagen eliminada');
+            }
+        }
+
+        function openImageViewer(idx) {
+            currentIndex = idx;
+            const img = imagesList[idx];
+
+            if (img.is360) {
+                currentMode = '360';
+                hideAllViewers();
+                document.getElementById('panorama-360').classList.add('active-viewer');
+                document.getElementById('gallery-controls').classList.remove('hidden');
+                
+                const container = document.getElementById('panorama-360');
+                container.innerHTML = '';
+                window.viewer360 = pannellum.viewer('panorama-360', {
+                    "type": "equirectangular",
+                    "panorama": img.src,
+                    "autoLoad": true,
+                    "showZoomCtrl": true
+                });
+                document.getElementById('file-name-display').textContent = `360: ${img.name}`;
+            } else {
+                currentMode = 'image-single';
+                hideAllViewers();
+                document.getElementById('single-image-viewer').classList.add('active-viewer');
+                document.getElementById('gallery-controls').classList.remove('hidden');
+                document.getElementById('modal-img').src = img.src;
+                document.getElementById('file-name-display').textContent = `Imagen: ${img.name} (${idx + 1}/${imagesList.length})`;
+            }
+        }
+
+        function switchViewToGallery() {
+            if (currentMode.startsWith('pdf')) showPlansGallery();
+            else if (currentMode.startsWith('image') || currentMode === '360') showImagesGallery();
+        }
+
+        function navigateSingle(direction) {
+            if (currentMode === 'pdf-single') {
+                currentIndex = (currentIndex + direction + plansList.length) % plansList.length;
+                renderSinglePDF(currentIndex);
+            } else if (currentMode === 'image-single') {
+                currentIndex = (currentIndex + direction + imagesList.length) % imagesList.length;
+                openImageViewer(currentIndex);
+            }
+        }
+    </script>
+</body>
+</html>
